@@ -1,4 +1,4 @@
-name: OpenClaw Daily Report (Ultimate Stable)
+name: OpenClaw Daily Report (Ironclad Version)
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
         run: |
           python3 -c "
-          import urllib.parse, urllib.request, json, os, datetime
+          import urllib.parse, urllib.request, json, os, datetime, re
 
           now_bj = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
           hour = now_bj.hour
@@ -27,25 +27,29 @@ jobs:
               with urllib.request.urlopen(req) as f:
                   return json.loads(f.read().decode())['choices'][0]['message']['content']
 
-          # 早上逻辑 (07:00 - 12:00)
+          # 早上逻辑
           if 7 <= hour <= 12:
               txt1 = get_ai_res('精选一句《维特根斯坦传》语录并简短解读，80字内。')
               txt2 = get_ai_res('作为小红书专家，总结3个今日爆款案例（标题+账号名+爆点），180字内。')
               title, msg = '早安·深度简报', f'【维特根斯坦】\n{txt1}\n\n【小红书深度情报】\n{txt2}'
 
-          # 晚上逻辑 (其他时间手动触发或定时)
+          # 晚上逻辑 (模拟抓取，极致稳定)
           else:
+              news_list = []
               try:
-                  # 使用知乎日报 API，极其稳定
-                  with urllib.request.urlopen('https://news-at.zhihu.com/api/4/news/latest') as r:
-                      data = json.loads(r.read().decode())
-                      news_items = [item['title'] for item in data['stories'][:8]]
-                      news_str = '\n'.join([f'{i+1}. {t}' for i, t in enumerate(news_items)])
+                  # 方案 A: 尝试抓取百度热搜 (极其稳定)
+                  req = urllib.request.Request('https://top.baidu.com/board?tab=realtime', headers={'User-Agent': 'Mozilla/5.0'})
+                  with urllib.request.urlopen(req) as r:
+                      content = r.read().decode()
+                      # 正则提取新闻标题
+                      titles = re.findall(r'\"word\":\"(.*?)\"', content)
+                      news_list = [f'{i+1}. {t}' for i, t in enumerate(titles[0:10])]
               except:
-                  news_str = '1. 暂无重大新闻更新\n2. 请保持身心愉悦'
+                  news_list = ['1. 正在观察世界波动...', '2. 稍后为您呈现']
 
-              ai_comment = get_ai_res(f'请用一句话深度点评今日热点背后的人文关怀或社会趋势：{news_str[:200]}')
-              title, msg = '晚安·今日要闻', f'【知乎日报精选】\n{news_str}\n\n【AI哲学点评】\n{ai_comment}'
+              news_str = '\n'.join(news_list)
+              ai_comment = get_ai_res(f'请用一句话深度点评今日热点背后的人文关怀：{news_str[:200]}')
+              title, msg = '晚安·今日热搜', f'【今日实时热点】\n{news_str}\n\n【AI哲学点评】\n{ai_comment}'
 
           params = urllib.parse.urlencode({'title': title, 'desp': msg})
           urllib.request.urlopen(f'https://sctapi.ftqq.com/{os.environ[\"SERVERCHAN_SENDKEY\"]}.send?{params}')
