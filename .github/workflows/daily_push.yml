@@ -1,42 +1,37 @@
-name: Philosophy Daily
-
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 1 * * *'
-
-jobs:
-  push_job:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Run AI and Push
+      - name: Ask AI for Philosophy and Red-Book Trends
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
         run: |
           python3 -c "
-          import urllib.parse, urllib.request, json, os
-          try:
-              api_key = os.environ['OPENAI_API_KEY']
-              sct_key = os.environ['SERVERCHAN_SENDKEY']
-              
-              # 1. 问 AI
-              data = json.dumps({
-                  'model': 'deepseek-chat',
-                  'messages': [{'role': 'user', 'content': '精选一句维特根斯坦语录并简短解读，总共80字内。'}]
-              }).encode()
-              req = urllib.request.Request('https://api.deepseek.com/chat/completions', data=data, 
-                  headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'})
-              
-              with urllib.request.urlopen(req) as f:
-                  res = json.loads(f.read().decode())
-                  msg = res['choices'][0]['message']['content']
-              
-              # 2. 发微信
-              params = urllib.parse.urlencode({'title': '早安·维特根斯坦', 'desp': msg})
-              urllib.request.urlopen(f'https://sctapi.ftqq.com/{sct_key}.send?{params}')
-              print('Success!')
-          except Exception as e:
-              print(f'Error: {e}')
-              exit(1)
+import urllib.parse, urllib.request, json, os
+
+api_key = os.environ['OPENAI_API_KEY']
+send_key = os.environ['SERVERCHAN_SENDKEY']
+
+def get_ai_response(prompt):
+    req_data = {
+        'model': 'deepseek-chat',
+        'messages': [{'role': 'user', 'content': prompt}]
+    }
+    req = urllib.request.Request(
+        'https://api.deepseek.com/chat/completions',
+        data=json.dumps(req_data).encode(),
+        headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'}
+    )
+    with urllib.request.urlopen(req) as response:
+        res = json.loads(response.read().decode())
+        return res['choices'][0]['message']['content']
+
+# 任务 1：维特根斯坦语录
+philosophy = get_ai_response('精选一句《维特根斯坦传》语录并简短解读，80字内。')
+
+# 任务 2：小红书爆文分析
+xhb_trends = get_ai_response('作为自媒体专家，请总结最近24小时内小红书上最火的3个爆文类型或选题方向，用列表形式简述，并给出1个可以直接套用的标题公式。总字数150字内。')
+
+# 合并内容并发送
+full_content = f'【今日语录】\n{philosophy}\n\n【小红书爆文情报】\n{xhb_trends}'
+params = urllib.parse.urlencode({'title': '早安·今日简报', 'desp': full_content})
+urllib.request.urlopen(f'https://sctapi.ftqq.com/{send_key}.send?{params}')
+print('双重任务推送成功！')
           "
