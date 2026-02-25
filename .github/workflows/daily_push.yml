@@ -1,4 +1,4 @@
-name: OpenClaw Daily Report (Ironclad Version)
+name: OpenClaw Daily Report (Elite Edition)
 
 on:
   workflow_dispatch:
@@ -27,29 +27,50 @@ jobs:
               with urllib.request.urlopen(req) as f:
                   return json.loads(f.read().decode())['choices'][0]['message']['content']
 
-          # 早上逻辑
+          # --- 早上逻辑 ---
           if 7 <= hour <= 12:
               txt1 = get_ai_res('精选一句《维特根斯坦传》语录并简短解读，80字内。')
               txt2 = get_ai_res('作为小红书专家，总结3个今日爆款案例（标题+账号名+爆点），180字内。')
-              title, msg = '早安·深度简报', f'【维特根斯坦】\n{txt1}\n\n【小红书深度情报】\n{txt2}'
+              title, msg = '☀️ 早安·深度简报', f'**【维特根斯坦 · 每日一语】**\n> {txt1}\n\n**【🔥 小红书深度情报】**\n{txt2}'
 
-          # 晚上逻辑 (模拟抓取，极致稳定)
+          # --- 晚上逻辑 (精英汇报模式) ---
           else:
-              news_list = []
+              raw_news = ''
               try:
-                  # 方案 A: 尝试抓取百度热搜 (极其稳定)
                   req = urllib.request.Request('https://top.baidu.com/board?tab=realtime', headers={'User-Agent': 'Mozilla/5.0'})
                   with urllib.request.urlopen(req) as r:
                       content = r.read().decode()
-                      # 正则提取新闻标题
                       titles = re.findall(r'\"word\":\"(.*?)\"', content)
-                      news_list = [f'{i+1}. {t}' for i, t in enumerate(titles[0:10])]
+                      raw_news = '、'.join(titles[:25])
               except:
-                  news_list = ['1. 正在观察世界波动...', '2. 稍后为您呈现']
+                  raw_news = '全球资讯正在高频波动中...'
 
-              news_str = '\n'.join(news_list)
-              ai_comment = get_ai_res(f'请用一句话深度点评今日热点背后的人文关怀：{news_str[:200]}')
-              title, msg = '晚安·今日热搜', f'【今日实时热点】\n{news_str}\n\n【AI哲学点评】\n{ai_comment}'
+              prompt_news = f'''
+              你现在是 OpenClaw 首席政经观察员。请根据今日热点：{raw_news}
+              撰写一份对标专业内参的新闻简报。
+              
+              要求格式如下（严格遵守）：
+              📅 **AI 简报：全球动态精粹 {now_bj.strftime('%m-%d')}**
+              
+              **1. 🌍 【国际视野】**
+              (筛选国际、外交或宏观经济趋势，进行2条以上的深度概括，每条包含[运营视角/深度解读])
+              
+              **2. 🇨🇳 【核心要闻】**
+              (总结国内政策、重要会议或重大社会动向)
+              
+              **3. 📉 【经济与社会】**
+              (结合消费、民生、科技热点，用专业语境叙述)
+              
+              **4. 🎭 【AI 哲学点评】**
+              (用维特根斯坦或存在主义视角，一句话点评今日世相，语气冷峻且充满人文关怀)
+              
+              注意：
+              - 适当使用**加粗**来突出重点关键词。
+              - 增加 Emoji 符号提升美感。
+              - 总字数控制在 400 字左右，保持排版疏朗。
+              '''
+              formatted_news = get_ai_res(prompt_news)
+              title, msg = f'🌙 晚安 · 深度汇报 ({now_bj.strftime('%m-%d')})', formatted_news
 
           params = urllib.parse.urlencode({'title': title, 'desp': msg})
           urllib.request.urlopen(f'https://sctapi.ftqq.com/{os.environ[\"SERVERCHAN_SENDKEY\"]}.send?{params}')
