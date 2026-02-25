@@ -1,0 +1,24 @@
+name: OpenClaw Daily Push
+
+on:
+  workflow_dispatch: # 支持手动点击运行
+  schedule:
+    - cron: '0 22 * * *' # 每天早上 6 点发推送 (UTC 22:00)
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run OpenClaw Simple Push
+        env:
+          # 直接引用你刚才在 .env 里填好的变量
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_BASE: "https://api.deepseek.com"
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+        run: |
+          echo "正在调遣 OpenClaw 大脑..."
+          # 这里以后可以写具体的运行指令，现在我们先测试推送
+          curl -d "text=OpenClaw点火成功&desp=你的大龙虾已经待命！DeepSeek和Gemini已准备就绪。" https://sctapi.ftqq.com/${{ env.SERVERCHAN_SENDKEY }}.send
