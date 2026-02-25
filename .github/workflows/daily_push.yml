@@ -1,41 +1,41 @@
 name: OpenClaw Daily Philosophy
 
 on:
-  workflow_dispatch: # 支持手动点击测试
+  workflow_dispatch:
   schedule:
-    - cron: '0 1 * * *' # UTC 01:00 对应 北京时间 09:00
+    - cron: '0 1 * * *'
 
 jobs:
   philosophy_push:
     runs-on: ubuntu-latest
     steps:
-      - name: Ask AI for Wittgenstein Quote
-        id: ai_logic
+      - name: Ask AI and Send to WeChat
         env:
-          # 使用你之前在 Secrets 存好的 DeepSeek Key
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
         run: |
-          # 调用 DeepSeek API 获取语录
-          RESPONSE=$(curl -s https://api.deepseek.com/chat/completions \
+          # 1. 直接获取 AI 内容并存入临时文件，避免环境变量报错
+          curl -s https://api.deepseek.com/chat/completions \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $OPENAI_API_KEY" \
             -d '{
               "model": "deepseek-chat",
               "messages": [
-                {"role": "system", "content": "你是一位全世界最优秀的哲学导师，擅长解读维特根斯坦。"},
-                {"role": "user", "content": "请从《维特根斯坦传》中精选一句语录，并简要解释其哲学意义，字数在150字以内。"}
+                {"role": "system", "content": "你是一位哲学导师，擅长解读维特根斯坦。"},
+                {"role": "user", "content": "请从《维特根斯坦传》中精选一句短语录，并简要解释其意义，总字数控制在100字以内。"}
               ]
-            }')
-          
-          # 提取 AI 返回的内容（去掉多余引号和转义符）
-          CONTENT=$(echo $RESPONSE | jq -r '.choices[0].message.content')
-          echo "AI_CONTENT=$CONTENT" >> $GITHUB_ENV
+            }' | jq -r '.choices[0].message.content' > ai_msg.txt
 
-      - name: Send to WeChat via ServerChan
-        env:
-          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
-        run: |
-          # 将 AI 生成的内容推送到微信
-          # 注意：对内容进行 URL 编码防止特殊字符导致推送失败
-          ENCODED_CONTENT=$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$AI_CONTENT'''))")
-          curl -s "https://sctapi.ftqq.com/${{ env.SERVERCHAN_SENDKEY }}.send?title=早安·维特根斯坦&desp=$ENCODED_CONTENT"
+          # 2. 检查内容并处理换行，确保推送格式正确
+          CONTENT=$(cat ai_msg.txt)
+          echo "AI 生成内容为: $CONTENT"
+
+          # 3. 使用 Python 进行安全的 URL 编码并发送，彻底解决特殊字符问题
+          python3 -c "
+import urllib.parse, urllib.request, os
+content = open('ai_msg.txt').read()
+sendkey = os.environ['SERVERCHAN_SENDKEY']
+params = urllib.parse.urlencode({'title': '早安·维特根斯坦', 'desp': content})
+url = f'https://sctapi.ftqq.com/{sendkey}.send?{params}'
+urllib.request.urlopen(url)
+          "
