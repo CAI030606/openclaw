@@ -1,0 +1,16 @@
+name: OpenClaw Daily Push
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 22 * * *'
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Test Push
+        env:
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+        run: |
+          curl -d "text=OpenClaw点火成功&desp=你的大龙虾已经待命！DeepSeek和Gemini已准备就绪。" https://sctapi.ftqq.com/${{ env.SERVERCHAN_SENDKEY }}.send
