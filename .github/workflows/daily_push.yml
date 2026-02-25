@@ -1,33 +1,42 @@
-      - name: Ask AI and Send to WeChat
+name: Philosophy Daily
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 1 * * *'
+
+jobs:
+  push_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run AI and Push
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
         run: |
           python3 -c "
-import urllib.parse, urllib.request, json, os
-
-# 1. 直接请求 AI
-api_key = os.environ['OPENAI_API_KEY']
-req_data = {
-    'model': 'deepseek-chat',
-    'messages': [
-        {'role': 'system', 'content': '你是一位杰出的哲学导师。'},
-        {'role': 'user', 'content': '精选一句《维特根斯坦传》语录并简短解读，80字内。'}
-    ]
-}
-req = urllib.request.Request(
-    'https://api.deepseek.com/chat/completions',
-    data=json.dumps(req_data).encode(),
-    headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'}
-)
-
-with urllib.request.urlopen(req) as response:
-    res = json.loads(response.read().decode())
-    ai_content = res['choices'][0]['message']['content']
-
-# 2. 直接发送微信
-send_key = os.environ['SERVERCHAN_SENDKEY']
-params = urllib.parse.urlencode({'title': '早安·维特根斯坦', 'desp': ai_content})
-urllib.request.urlopen(f'https://sctapi.ftqq.com/{send_key}.send?{params}')
-print('推送成功！')
+          import urllib.parse, urllib.request, json, os
+          try:
+              api_key = os.environ['OPENAI_API_KEY']
+              sct_key = os.environ['SERVERCHAN_SENDKEY']
+              
+              # 1. 问 AI
+              data = json.dumps({
+                  'model': 'deepseek-chat',
+                  'messages': [{'role': 'user', 'content': '精选一句维特根斯坦语录并简短解读，总共80字内。'}]
+              }).encode()
+              req = urllib.request.Request('https://api.deepseek.com/chat/completions', data=data, 
+                  headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {api_key}'})
+              
+              with urllib.request.urlopen(req) as f:
+                  res = json.loads(f.read().decode())
+                  msg = res['choices'][0]['message']['content']
+              
+              # 2. 发微信
+              params = urllib.parse.urlencode({'title': '早安·维特根斯坦', 'desp': msg})
+              urllib.request.urlopen(f'https://sctapi.ftqq.com/{sct_key}.send?{params}')
+              print('Success!')
+          except Exception as e:
+              print(f'Error: {e}')
+              exit(1)
           "
