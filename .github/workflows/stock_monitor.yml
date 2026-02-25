@@ -1,0 +1,69 @@
+name: OpenClaw Stock Radar Auto
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 北京时间周一至周五，09:30 - 16:00，每 30 分钟运行一次
+    # UTC时间为 01:30 - 08:00
+    - cron: '30/30 1-8 * * 1-5'
+
+jobs:
+  check_stocks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dependencies
+        run: pip install yfinance pandas
+
+      - name: Auto Price & MA199 Check
+        env:
+          SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
+          MY_STOCKS: ${{ secrets.MY_STOCKS }}
+          STOCK_STRATEGY: ${{ secrets.STOCK_STRATEGY }}
+        run: |
+          python3 -c "
+          import yfinance as yf
+          import os, urllib.parse, urllib.request
+          import pandas as pd
+
+          stocks = os.environ['MY_STOCKS'].split(',')
+          strategies = os.environ['STOCK_STRATEGY'].strip().split('\n')
+          send_key = os.environ['SERVERCHAN_SENDKEY']
+          alerts = []
+
+          for i, symbol in enumerate(stocks):
+              try:
+                  ticker = yf.Ticker(symbol)
+                  # 获取 1 年历史数据用于计算 MA199 和基准价
+                  hist = ticker.history(period='1y')
+                  
+                  if len(hist) < 2:
+                      continue
+
+                  current_price = hist['Close'].iloc[-1]
+                  prev_close = hist['Close'].iloc[-2] # 自动获取前一交易日收盘价
+                  ma199 = hist['Close'].rolling(window=199).mean().iloc[-1]
+                  
+                  # 解析策略：只读比例
+                  buy_trigger_pct, sell_trigger_pct = map(float, strategies[i].split('|'))
+                  
+                  # 计算相对于昨收的实时涨跌幅
+                  realtime_change = current_price / prev_close
+                  
+                  # 预警逻辑
+                  if realtime_change <= buy_trigger_pct:
+                      alerts.append(f'📉 实时大跌 | {symbol}\n现价: {current_price:.2f} (较昨收跌{(1-realtime_change)*100:.1f}%)')
+                  
+                  if realtime_change >= sell_trigger_pct:
+                      alerts.append(f'📈 实时大涨 | {symbol}\n现价: {current_price:.2f} (较昨收涨{(realtime_change-1)*100:.1f}%)')
+
+                  if current_price < ma199:
+                      alerts.append(f'🛡️ MA199预警 | {symbol}\n现价: {current_price:.2f} 已跌破MA199线({ma199:.2f})')
+                      
+              except Exception as e:
+                  print(f'Error on {symbol}: {e}')
+
+          if alerts:
+              full_msg = '\n\n'.join(alerts)
+              params = urllib.parse.urlencode({'title': '🔔 OpenClaw 股票异动', 'desp': full_msg})
+              urllib.request.urlopen(f'https://sctapi.ftqq.com/{send_key}.send?{params}')
+          "
