@@ -1,9 +1,10 @@
-name: OpenClaw Daily Report
+name: OpenClaw Daily Report (Morning & Night)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 1 * * *'
+    - cron: '0 1 * * *'   # 北京时间 09:00 (1+8)
+    - cron: '30 13 * * *' # 北京时间 21:30 (13.5+8)
 
 jobs:
   daily_job:
@@ -15,7 +16,11 @@ jobs:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
         run: |
           python3 -c "
-          import urllib.parse, urllib.request, json, os
+          import urllib.parse, urllib.request, json, os, datetime
+
+          # 设置北京时间
+          now_bj = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
+          hour = now_bj.hour
 
           def get_ai_res(prompt):
               data = json.dumps({'model': 'deepseek-chat', 'messages': [{'role': 'user', 'content': prompt}]}).encode()
@@ -23,21 +28,35 @@ jobs:
               with urllib.request.urlopen(req) as f:
                   return json.loads(f.read().decode())['choices'][0]['message']['content']
 
-          # 1. 维特根斯坦
-          txt1 = get_ai_res('精选一句《维特根斯坦传》语录并简短解读，80字内。')
+          send_key = os.environ['SERVERCHAN_SENDKEY']
 
-          # 2. 小红书全能情报 (融合版)
-          prompt_xhs = '''
-          作为小红书资深运营，请提供一份今日情报：
-          1. 近期热门方向：列出3个。
-          2. 深度案例拆解：提供1个具体的万赞模拟案例，包含【标题】、【对标账号】、以及【为什么火】。
-          3. 爆款标题公式：给出一个可以直接套用的万能公式。
-          总字数250字以内，排版要清晰，多用符号。
-          '''
-          txt2 = get_ai_res(prompt_xhs)
+          # --- 早上 9 点逻辑 ---
+          if 7 <= hour <= 11:
+              txt1 = get_ai_res('精选一句《维特根斯坦传》语录并简短解读，80字内。')
+              prompt_xhs = '作为小红书专家，总结3个今日爆款案例（标题+账号名+爆点），180字内。'
+              txt2 = get_ai_res(prompt_xhs)
+              title = '早安·深度简报'
+              msg = f'【维特根斯坦】\n{txt1}\n\n【小红书深度情报】\n{txt2}'
 
-          # 发送
-          msg = f'【早安·维特根斯坦】\n{txt1}\n\n【小红书全能情报】\n{txt2}'
-          params = urllib.parse.urlencode({'title': '早安·全能简报', 'desp': msg})
-          urllib.request.urlopen(f'https://sctapi.ftqq.com/{os.environ[\"SERVERCHAN_SENDKEY\"]}.send?{params}')
+          # --- 晚上 21 点逻辑 ---
+          elif 20 <= hour <= 23:
+              # 抓取新闻联播汇总 (使用 60s 免费接口)
+              try:
+                  with urllib.request.urlopen('https://api.vvhan.com/api/60s?type=json') as r:
+                      news_data = json.loads(r.read().decode())
+                      news_list = '\n'.join(news_data['data'][:10]) # 取前10条
+                      title = '晚安·新闻汇总'
+                      msg = f'【今日新闻联播精选】\n{news_list}\n\n【AI点评】\n' + get_ai_res(f'请用一句话点评今日新闻亮点：{news_list[:100]}')
+              except:
+                  title = '晚安·提醒'
+                  msg = '今日新闻抓取失败，请检查接口。'
+          
+          else:
+              # 手动触发时，同时发送两部分内容
+              title = 'OpenClaw 手动测试'
+              msg = '当前非定时时段，系统运行正常。'
+
+          # 执行发送
+          params = urllib.parse.urlencode({'title': title, 'desp': msg})
+          urllib.request.urlopen(f'https://sctapi.ftqq.com/{send_key}.send?{params}')
           "
