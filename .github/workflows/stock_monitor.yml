@@ -1,20 +1,19 @@
-name: OpenClaw Stock Radar Auto
+name: OpenClaw Stock Radar Pro (Smart Timing)
 
 on:
   workflow_dispatch:
   schedule:
-    # 北京时间周一至周五，09:30 - 16:00，每 30 分钟运行一次
-    # UTC时间为 01:30 - 08:00
-    - cron: '30/30 1-8 * * 1-5'
+    # 扩大运行时间窗口，覆盖美股和 A 股（北京时间 09:00 - 05:00）
+    - cron: '*/30 * * * *'
 
 jobs:
   check_stocks:
     runs-on: ubuntu-latest
     steps:
       - name: Install dependencies
-        run: pip install yfinance pandas
+        run: pip install yfinance pandas pytz
 
-      - name: Auto Price & MA199 Check
+      - name: Smart Market Timing Check
         env:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
           MY_STOCKS: ${{ secrets.MY_STOCKS }}
@@ -23,47 +22,61 @@ jobs:
           python3 -c "
           import yfinance as yf
           import os, urllib.parse, urllib.request
-          import pandas as pd
+          from datetime import datetime
+          import pytz
+
+          # 设置时区
+          beijing_tz = pytz.timezone('Asia/Shanghai')
+          now_bj = datetime.now(beijing_tz)
+          hour_min = now_bj.strftime('%H:%M')
+          is_weekday = now_bj.weekday() < 5
 
           stocks = os.environ['MY_STOCKS'].split(',')
           strategies = os.environ['STOCK_STRATEGY'].strip().split('\n')
           send_key = os.environ['SERVERCHAN_SENDKEY']
           alerts = []
 
+          def is_market_open(symbol):
+              # A 股/港股时段: 09:15 - 16:00
+              if '.ss' in symbol or '.sz' in symbol or '.hk' in symbol:
+                  return '09:15' <= hour_min <= '16:00'
+              # 美股时段 (冬令时): 22:30 - 05:00 (+1天)
+              # 为了简化，判断在 22:30 之后或 05:00 之前
+              else:
+                  return hour_min >= '22:30' or hour_min <= '05:00'
+
+          if not is_weekday:
+              print('周末休市')
+              exit()
+
           for i, symbol in enumerate(stocks):
+              if not is_market_open(symbol):
+                  print(f'{symbol} 所在市场已收盘，跳过。')
+                  continue
+
               try:
                   ticker = yf.Ticker(symbol)
-                  # 获取 1 年历史数据用于计算 MA199 和基准价
-                  hist = ticker.history(period='1y')
-                  
-                  if len(hist) < 2:
-                      continue
+                  hist = ticker.history(period='2d')
+                  if len(hist) < 2: continue
 
                   current_price = hist['Close'].iloc[-1]
-                  prev_close = hist['Close'].iloc[-2] # 自动获取前一交易日收盘价
-                  ma199 = hist['Close'].rolling(window=199).mean().iloc[-1]
+                  prev_close = hist['Close'].iloc[-2]
+                  ma199 = ticker.history(period='1y')['Close'].rolling(window=199).mean().iloc[-1]
                   
-                  # 解析策略：只读比例
                   buy_trigger_pct, sell_trigger_pct = map(float, strategies[i].split('|'))
-                  
-                  # 计算相对于昨收的实时涨跌幅
                   realtime_change = current_price / prev_close
                   
-                  # 预警逻辑
                   if realtime_change <= buy_trigger_pct:
                       alerts.append(f'📉 实时大跌 | {symbol}\n现价: {current_price:.2f} (较昨收跌{(1-realtime_change)*100:.1f}%)')
-                  
                   if realtime_change >= sell_trigger_pct:
                       alerts.append(f'📈 实时大涨 | {symbol}\n现价: {current_price:.2f} (较昨收涨{(realtime_change-1)*100:.1f}%)')
-
                   if current_price < ma199:
-                      alerts.append(f'🛡️ MA199预警 | {symbol}\n现价: {current_price:.2f} 已跌破MA199线({ma199:.2f})')
-                      
+                      alerts.append(f'🛡️ MA199预警 | {symbol}\n现价: {current_price:.2f} 跌破MA199({ma199:.2f})')
               except Exception as e:
                   print(f'Error on {symbol}: {e}')
 
           if alerts:
               full_msg = '\n\n'.join(alerts)
-              params = urllib.parse.urlencode({'title': '🔔 OpenClaw 股票异动', 'desp': full_msg})
+              params = urllib.parse.urlencode({'title': '🔔 OpenClaw 实时预警', 'desp': full_msg})
               urllib.request.urlopen(f'https://sctapi.ftqq.com/{send_key}.send?{params}')
           "
