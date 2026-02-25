@@ -15,20 +15,21 @@ jobs:
           SERVERCHAN_SENDKEY: ${{ secrets.SERVERCHAN_SENDKEY }}
         run: |
           python3 -c "
-import urllib.parse, urllib.request, json, os
+          import urllib.parse, urllib.request, json, os
 
-def get_ai_res(prompt):
-    data = json.dumps({'model': 'deepseek-chat', 'messages': [{'role': 'user', 'content': prompt}]}).encode()
-    req = urllib.request.Request('https://api.deepseek.com/chat/completions', data=data, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {os.environ[\"OPENAI_API_KEY\"]}'})
-    with urllib.request.urlopen(req) as f:
-        return json.loads(f.read().decode())['choices'][0]['message']['content']
+          def get_ai_res(prompt):
+              data = json.dumps({'model': 'deepseek-chat', 'messages': [{'role': 'user', 'content': prompt}]}).encode()
+              req = urllib.request.Request('https://api.deepseek.com/chat/completions', data=data, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {os.environ[\"OPENAI_API_KEY\"]}'})
+              with urllib.request.urlopen(req) as f:
+                  return json.loads(f.read().decode())['choices'][0]['message']['content']
 
-# 执行两个任务
-txt1 = get_ai_res('精选一句《维特根斯坦传》语录并简短解读，80字内。')
-txt2 = get_ai_res('总结最近小红书热门选题方向和1个标题公式，100字内。')
+          # 1. 维特根斯坦
+          txt1 = get_ai_res('精选一句《维特根斯坦传》语录并简短解读，80字内。')
+          # 2. 小红书
+          txt2 = get_ai_res('总结最近小红书热门选题方向和1个标题公式，100字内。')
 
-# 打包发送
-msg = f'【维特根斯坦】\n{txt1}\n\n【小红书情报】\n{txt2}'
-params = urllib.parse.urlencode({'title': '早安·今日双享', 'desp': msg})
-urllib.request.urlopen(f'https://sctapi.ftqq.com/{os.environ[\"SERVERCHAN_SENDKEY\"]}.send?{params}')
+          # 发送
+          msg = f'【维特根斯坦】\n{txt1}\n\n【小红书情报】\n{txt2}'
+          params = urllib.parse.urlencode({'title': '早安·今日简报', 'desp': msg})
+          urllib.request.urlopen(f'https://sctapi.ftqq.com/{os.environ[\"SERVERCHAN_SENDKEY\"]}.send?{params}')
           "
