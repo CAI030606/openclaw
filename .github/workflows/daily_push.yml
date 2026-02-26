@@ -3,8 +3,8 @@ name: OpenClaw Daily Report (Final Calibrated)
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 1 * * *'   # 目标北京时间 09:00
-    - cron: '30 13 * * *' # 目标北京时间 21:30
+    - cron: '0 1 * * *'
+    - cron: '30 13 * * *'
 
 jobs:
   daily_job:
@@ -18,51 +18,37 @@ jobs:
           python3 -c "
           import urllib.parse, urllib.request, json, os, datetime, re
 
-          # 1. 强制获取北京时间 (不管GitHub延迟多久，都以北京时间为准)
           now_bj = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
           hour = now_bj.hour
           date_str = now_bj.strftime('%m-%d')
 
           def get_ai_res(prompt):
               data = json.dumps({'model': 'deepseek-chat', 'messages': [{'role': 'user', 'content': prompt}]}).encode()
-              req = urllib.request.Request('https://api.deepseek.com/chat/completions', data=data, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {os.environ[\"OPENAI_API_KEY\"]}'})
+              req = urllib.request.Request('https://api.deepseek.com/chat/completions', data=data, headers={'Content-Type': 'application/json', 'Authorization': 'Bearer ' + os.environ['OPENAI_API_KEY']})
               with urllib.request.urlopen(req) as f:
                   return json.loads(f.read().decode())['choices'][0]['message']['content']
 
-          # 2. 扩容判断逻辑：只要在北京时间 05:00 - 15:00 之间运行，就发早报
+          # 逻辑判定
           if 5 <= hour <= 15:
-              txt1 = get_ai_res('精选一句《维特根斯坦传》语录并简短解读，200字内。')
-              txt2 = get_ai_res('作为小红书专家，总结3个今日爆款案例（标题+账号名+爆点），500字内。')
-              title = f'☀️ 早安·深度简报 {date_str}'
-              msg = f'**【维特根斯坦 · 每日一语】**\n> {txt1}\n\n**【🔥 小红书深度情报】**\n{txt2}'
-
-          # 3. 只要在北京时间 15:00 - 04:00 之间运行，就发晚报
+              txt1 = get_ai_res('精选一句《维特根斯坦传》语录并简短解读，300字内。')
+              txt2 = get_ai_res('总结5个今日小红书爆款案例，500字内。')
+              title = '☀️ 早安·深度简报 ' + date_str
+              msg = '**【维特根斯坦 · 每日一语】**\n> ' + txt1 + '\n\n**【🔥 小红书深度情报】**\n' + txt2
           else:
-              raw_news = ''
+              raw_news = '全球资讯波动中...'
               try:
                   req = urllib.request.Request('https://top.baidu.com/board?tab=realtime', headers={'User-Agent': 'Mozilla/5.0'})
                   with urllib.request.urlopen(req) as r:
-                      content = r.read().decode()
-                      titles = re.findall(r'\"word\":\"(.*?)\"', content)
+                      titles = re.findall(r'\"word\":\"(.*?)\"', r.read().decode())
                       raw_news = '、'.join(titles[:25])
-              except:
-                  raw_news = '全球资讯正在高频波动中...'
+              except: pass
 
-              prompt_news = f'''
-              你现在是 OpenClaw 首席政经观察员。请根据今日热点：{{raw_news}}
-              撰写一份对标专业内参的新闻简报。格式参考：
-              📅 **AI 简报：新闻联播精华 {date_str}**
-              **1. 🌍 【国际视野】** (含运营视角/深度解读)
-              **2. 🇨🇳 【核心要闻】** (总结国内重大动向)
-              **3. 📉 【经济与社会】** (排版美观，重点加粗)
-              **4. 🎭 【AI 哲学点评】** (人文关怀视角)
-              字数500字左右。
-              '''
-              formatted_news = get_ai_res(prompt_news)
-              title = f'🌙 晚安·深度汇报 {date_str}'
-              msg = formatted_news
+              prompt = '请根据热点：' + raw_news + ' 撰写一份专业内参简报。包含【国际视野】、【核心要闻】、【经济与社会】、【今日小结】和【AI哲学点评】。要求多用粗体，排版精美，500字左右。'
+              title = '🌙 晚安·深度汇报 ' + date_str
+              msg = get_ai_res(prompt)
 
-          # 4. 执行发送
+          # 发送
+          s_key = os.environ['SERVERCHAN_SENDKEY']
           params = urllib.parse.urlencode({'title': title, 'desp': msg})
-          urllib.request.urlopen(f'https://sctapi.ftqq.com/{{os.environ[\"SERVERCHAN_SENDKEY\"]}}.send?{{params}}')
+          urllib.request.urlopen('https://sctapi.ftqq.com/' + s_key + '.send?' + params)
           "
