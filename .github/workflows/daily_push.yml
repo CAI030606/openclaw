@@ -1,10 +1,10 @@
-name: OpenClaw Elite Intelligence (Calibrated)
+name: OpenClaw Elite Intelligence (Pure Edition)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '10 1 * * *'   # 目标北京时间 09:10 (早报)
-    - cron: '40 13 * * *'  # 目标北京时间 21:40 (晚报)
+    - cron: '10 1 * * *'   # 早上 09:10
+    - cron: '40 13 * * *'  # 晚上 21:40
 
 jobs:
   daily_job:
@@ -20,8 +20,6 @@ jobs:
 
           now_bj = datetime.datetime.utcnow() + datetime.timedelta(hours=8)
           date_str = now_bj.strftime('%m-%d')
-          
-          # 核心修复：根据 UTC 触发时间强制分流，不再依赖不稳定的当前小时
           utc_hour = datetime.datetime.utcnow().hour
           is_morning = (0 <= utc_hour <= 5)
 
@@ -32,12 +30,16 @@ jobs:
                   return json.loads(f.read().decode())['choices'][0]['message']['content']
 
           if is_morning:
-              # --- 早安：哲学、小红书与 AI 大事记 ---
-              prompt = '请生成今日简报。要求包含：1.【维特根斯坦语录及深度解读】(300字)；2.【今日 AI 届 3 条大事记汇总】；3.【5个小红书爆款拆解】。排版要精美，多用符号和加粗。'
+              # --- ☀️ 早安：回归美感排版 ---
+              prompt = '请生成今日早间简报。要求模块化排版：\n' + \
+                       '1. ✨ **【维特根斯坦 · 哲学思辨】** (300字深度解读，带 > 引用符)\n' + \
+                       '2. 🤖 **【AI 科技前哨】** (今日3条全球AI大事件精简汇总)\n' + \
+                       '3. 🔥 **【小红书流量密码】** (5个爆款案例拆解，多用Emoji)\n' + \
+                       '排版要精美，重点关键词**加粗**。'
               title = '☀️ 早安·深度情报 ' + date_str
               msg = get_ai_res(prompt)
           else:
-              # --- 晚安：财经汇总与何校长式内参 ---
+              # --- 🌙 晚安：首席内参 + 财经 + 进度表 ---
               raw_news = '资讯获取中...'
               try:
                   req = urllib.request.Request('https://top.baidu.com/board?tab=realtime', headers={'User-Agent': 'Mozilla/5.0'})
@@ -46,7 +48,13 @@ jobs:
                       raw_news = '、'.join(titles[:25])
               except: pass
 
-              prompt = '你现在是首席分析师。请针对热点 [' + raw_news + '] 撰写内参。模块需包含：1.【财经核心汇总】(含宏观与行业动态)；2.【国际与国内要闻】；3.【今日小结】。并仿照何校长风格，生成一份本周深度阅读进度 ✅ 表格。排版需冷峻、专业，500字以上。'
+              prompt = '你现在是首席政经分析师。请针对热点 [' + raw_news + '] 撰写内参。模块需包含：\n' + \
+                       '1. 🌍 **【国际动态】** (深度大国博弈)\n' + \
+                       '2. 🇨🇳 **【国内要闻】** (政策与经济)\n' + \
+                       '3. 📈 **【财经风向标】** (重点汇总今日财经、行业波动)\n' + \
+                       '4. 🎯 **【知识内化 · 研学进度表】** (生成一份 Markdown 进度表格，含序号、文章标题、深度分析、金句、进度✅)\n' + \
+                       '5. 🎭 **【AI 哲学点评】** (人文关怀收尾)。\n' + \
+                       '注意：严禁出现任何特定人物姓名。排版要求极高，多用粗体，500字以上，具备专业内参质感。'
               title = '🌙 晚安·首席内参 ' + date_str
               msg = get_ai_res(prompt)
 
