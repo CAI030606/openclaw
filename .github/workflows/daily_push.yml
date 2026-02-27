@@ -1,10 +1,10 @@
-name: OpenClaw Elite Intelligence (Pure Edition)
+name: OpenClaw Elite Intelligence (Refined Classic)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '10 1 * * *'   # 早上 09:10
-    - cron: '40 13 * * *'  # 晚上 21:40
+    - cron: '10 1 * * *'   # 早报 09:10
+    - cron: '40 13 * * *'  # 晚报 21:40
 
 jobs:
   daily_job:
@@ -29,35 +29,36 @@ jobs:
               with urllib.request.urlopen(req) as f:
                   return json.loads(f.read().decode())['choices'][0]['message']['content']
 
+          # 抓取逻辑：综合热搜作为分析底料
+          raw_news = '资讯获取中...'
+          try:
+              req = urllib.request.Request('https://top.baidu.com/board?tab=realtime', headers={'User-Agent': 'Mozilla/5.0'})
+              with urllib.request.urlopen(req) as r:
+                  titles = re.findall(r'\"word\":\"(.*?)\"', r.read().decode())
+                  raw_news = '、'.join(titles[:25])
+          except: pass
+
           if is_morning:
-              # --- ☀️ 早安：回归美感排版 ---
-              prompt = '请生成今日早间简报。要求模块化排版：\n' + \
-                       '1. ✨ **【维特根斯坦 · 哲学思辨】** (300字深度解读，带 > 引用符)\n' + \
-                       '2. 🤖 **【AI 科技前哨】** (今日3条全球AI大事件精简汇总)\n' + \
-                       '3. 🔥 **【小红书流量密码】** (5个爆款案例拆解，多用Emoji)\n' + \
-                       '排版要精美，重点关键词**加粗**。'
-              title = '☀️ 早安·深度情报 ' + date_str
-              msg = get_ai_res(prompt)
+              # --- ☀️ 早报：哲学、AI前哨与流量拆解 ---
+              prompt = f'你现在是首席内容官。请基于今日动态生成早间内参。要求使用昨晚那种带层级、加粗、逻辑感极强的排版：\n' + \
+                       '1. ✨ **【维特根斯坦 · 哲学思辨】** (300字深度解读，需带有引用符号 > )\n' + \
+                       '2. 🤖 **【AI 科技前哨】** (今日全球AI界最值得关注的3件大事)\n' + \
+                       '3. 🔥 **【小红书流量密码】** (5个爆款案例深度拆解)\n' + \
+                       '排版必须专业，重点内容加粗，段落清晰。'
+              title = f'☀️ 早安·深度情报 {date_str}'
           else:
-              # --- 🌙 晚安：首席内参 + 财经 + 进度表 ---
-              raw_news = '资讯获取中...'
-              try:
-                  req = urllib.request.Request('https://top.baidu.com/board?tab=realtime', headers={'User-Agent': 'Mozilla/5.0'})
-                  with urllib.request.urlopen(req) as r:
-                      titles = re.findall(r'\"word\":\"(.*?)\"', r.read().decode())
-                      raw_news = '、'.join(titles[:25])
-              except: pass
+              # --- 🌙 晚报：首席内参 + 财经专线 + 研学进度 ---
+              prompt = f'你现在是首席政经分析师。请针对热点 [{raw_news}] 撰写深度内参。必须严格遵守昨晚的视觉逻辑：\n' + \
+                       '1. 🌍 **【国际视野】** (深度分析大国博弈)\n' + \
+                       '2. 🇨🇳 **【核心要闻】** (政策与社会动向)\n' + \
+                       '3. 📈 **【财经风向标 · 专线】** (独立模块：深度汇总今日全球财报、汇率、大宗商品及行业波动)\n' + \
+                       '4. 🤖 **【今日 AI 大事记】** (汇总今日技术突破与产业动态)\n' + \
+                       '5. 🎯 **【知识内化 · 研学进度表】** (Markdown 表格：序号|标题|深度分析|金句|进度✅)\n' + \
+                       '6. 🎭 **【AI 哲学点评】** (以人文视角收尾)。\n' + \
+                       '注意：严禁出现任何特定人物姓名。排版要有呼吸感，500字以上。'
+              title = f'🌙 晚安·首席内参 {date_str}'
 
-              prompt = '你现在是首席政经分析师。请针对热点 [' + raw_news + '] 撰写内参。模块需包含：\n' + \
-                       '1. 🌍 **【国际动态】** (深度大国博弈)\n' + \
-                       '2. 🇨🇳 **【国内要闻】** (政策与经济)\n' + \
-                       '3. 📈 **【财经风向标】** (重点汇总今日财经、行业波动)\n' + \
-                       '4. 🎯 **【知识内化 · 研学进度表】** (生成一份 Markdown 进度表格，含序号、文章标题、深度分析、金句、进度✅)\n' + \
-                       '5. 🎭 **【AI 哲学点评】** (人文关怀收尾)。\n' + \
-                       '注意：严禁出现任何特定人物姓名。排版要求极高，多用粗体，500字以上，具备专业内参质感。'
-              title = '🌙 晚安·首席内参 ' + date_str
-              msg = get_ai_res(prompt)
-
+          msg = get_ai_res(prompt)
           s_key = os.environ['SERVERCHAN_SENDKEY']
           params = urllib.parse.urlencode({'title': title, 'desp': msg})
           urllib.request.urlopen('https://sctapi.ftqq.com/' + s_key + '.send?' + params)
